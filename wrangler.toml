@@ -5,7 +5,7 @@ main = "worker.js"
 compatibility_date = "2026-06-30"
 workers_dev = true
 
-# Penyimpanan permanen (KV). Tempel ID namespace dari dashboard di bawah.
+# Penyimpanan permanen (KV). ID di bawah = KV namespace milikmu.
 [[kv_namespaces]]
 binding = "LICENSE_KV"
 id = "71dd09254f94462e8208fe0ef965fff8"
