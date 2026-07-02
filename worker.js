@@ -1,14 +1,19 @@
 // ============================================================
 //  Cloudflare Worker — server lisensi Roblox + panel admin + bot Discord.
-//  Bindings: KV Namespace "LICENSE_KV".
-//  Secrets:
-//    ADMIN_KEY            (wajib)  - kunci masuk panel admin.
-//    DISCORD_PUBLIC_KEY   (opsional, wajib untuk command /own)
-//    DISCORD_BOT_TOKEN    (opsional, wajib untuk command /own)
-//    DISCORD_APPLICATION_ID (opsional, wajib untuk command /own)
-//  Struktur data KV:
+//
+//  ---- KONFIGURASI (semua lewat dashboard Cloudflare, tak perlu edit file) ----
+//  Binding KV (wajib):
+//    LICENSE_KV             - namespace KV tempat data disimpan.
+//  Secrets (Settings -> Variables and Secrets, pilih tipe "Secret"):
+//    ADMIN_KEY              (WAJIB)    - kunci masuk panel admin. Buat panjang & acak.
+//    DISCORD_PUBLIC_KEY     (opsional) - wajib hanya untuk command /own.
+//    DISCORD_BOT_TOKEN      (opsional) - wajib hanya untuk command /own.
+//    DISCORD_APPLICATION_ID (opsional) - wajib hanya untuk command /own.
+//
+//  ---- Struktur data KV (key "db") ----
 //    { products: { <pid>: { name, createdAt, users:{}, groups:{} } },
-//      settings: { discordWebhook, discordBotName, discordBotAvatar } }
+//      settings: { discordWebhook, discordBotName, discordBotAvatar,
+//                  discordAlertUnauthorized } }
 // ============================================================
 
 export default {
@@ -25,11 +30,15 @@ export default {
       // ---- dipanggil dari dalam game Roblox ----
       if (path === "/api/verify" && method === "POST") {
         const body = await readJson(request);
+        const pid = typeof body.productId === "string" ? body.productId : "";
         const db = await loadDB(env);
-        const ok = body.productId
-          ? await authorized(db, body.productId, body.creatorId, body.creatorType)
-          : false;
-        return json({ authorized: ok, nonce: body.nonce, ts: Date.now() });
+        const ok = pid ? await authorized(db, pid, body.creatorId, body.creatorType) : false;
+        if (!ok) {
+          // (opsional) beri tahu penjual saat game TIDAK berlisensi mencoba jalan.
+          ctx.waitUntil(alertUnauthorized(db, body).catch(() => {}));
+        }
+        // ts dalam DETIK epoch; dipakai snippet Lua untuk menolak respon basi.
+        return json({ authorized: ok, nonce: body.nonce, ts: Math.floor(Date.now() / 1000) });
       }
 
       // ---- endpoint publik untuk bot Discord (Interactions Endpoint URL) ----
@@ -96,7 +105,7 @@ export default {
         await saveDB(env, db);
         if (isNew) {
           // log ke Discord hanya untuk ID yang benar-benar baru
-          await notifyDiscord(db, p, productId, String(userId), username).catch(() => {});
+          ctx.waitUntil(notifyDiscord(db, p, productId, String(userId), username).catch(() => {}));
         }
         return json({ ok: true, username: username || null, isNew });
       }
@@ -154,16 +163,18 @@ export default {
           discordWebhook: s.discordWebhook || "",
           discordBotName: s.discordBotName || "",
           discordBotAvatar: s.discordBotAvatar || "",
+          discordAlertUnauthorized: !!s.discordAlertUnauthorized,
           hasSlashCommandSecrets: !!(env.DISCORD_APPLICATION_ID && env.DISCORD_BOT_TOKEN && env.DISCORD_PUBLIC_KEY),
         });
       }
       if (path === "/api/admin/settings" && method === "POST") {
-        const { discordWebhook, discordBotName, discordBotAvatar } = await readJson(request);
+        const { discordWebhook, discordBotName, discordBotAvatar, discordAlertUnauthorized } = await readJson(request);
         const db = await loadDB(env);
         db.settings = db.settings || {};
         if (discordWebhook !== undefined) db.settings.discordWebhook = (discordWebhook || "").trim();
         if (discordBotName !== undefined) db.settings.discordBotName = (discordBotName || "").trim();
         if (discordBotAvatar !== undefined) db.settings.discordBotAvatar = (discordBotAvatar || "").trim();
+        if (discordAlertUnauthorized !== undefined) db.settings.discordAlertUnauthorized = !!discordAlertUnauthorized;
         await saveDB(env, db);
         return json({ ok: true });
       }
@@ -206,7 +217,19 @@ function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json" } });
 }
 async function readJson(request) { try { return await request.json(); } catch { return {}; } }
-function isAdmin(request, env) { return request.headers.get("x-admin-key") === env.ADMIN_KEY; }
+function timingSafeEqual(a, b) {
+  const enc = new TextEncoder();
+  const ba = enc.encode(String(a == null ? "" : a));
+  const bb = enc.encode(String(b == null ? "" : b));
+  let diff = ba.length ^ bb.length;
+  const n = Math.max(ba.length, bb.length);
+  for (let i = 0; i < n; i++) diff |= (ba[i] || 0) ^ (bb[i] || 0);
+  return diff === 0;
+}
+function isAdmin(request, env) {
+  if (!env.ADMIN_KEY) return false; // tanpa ADMIN_KEY, panel terkunci total
+  return timingSafeEqual(request.headers.get("x-admin-key"), env.ADMIN_KEY);
+}
 
 function genId() {
   const c = "abcdefghijkmnpqrstuvwxyz23456789";
@@ -333,6 +356,44 @@ async function notifyDiscord(db, product, pid, userId, username) {
   });
 }
 
+// ---------- (opsional) peringatan saat game TAK berlisensi mencoba jalan ----------
+const _alertSeen = new Map(); // throttle in-memory per isolate: key -> waktu terakhir (ms)
+function _throttle(key, ms) {
+  const now = Date.now();
+  const last = _alertSeen.get(key) || 0;
+  if (now - last < ms) return false;
+  _alertSeen.set(key, now);
+  if (_alertSeen.size > 500) { let i = 0; for (const k of _alertSeen.keys()) { _alertSeen.delete(k); if (++i >= 250) break; } }
+  return true;
+}
+async function alertUnauthorized(db, body) {
+  const s = db.settings || {};
+  if (!s.discordAlertUnauthorized || !s.discordWebhook) return;
+  const pid = String(body.productId || "");
+  const p = db.products && db.products[pid];
+  if (!p) return; // hanya untuk produk yang memang ada
+  const creatorId = String(body.creatorId || "?");
+  if (!_throttle(pid + ":" + creatorId, 60 * 60 * 1000)) return; // maks 1x / jam / game
+  const placeId = body.placeId ? String(body.placeId) : null;
+  const payload = {
+    username: (s.discordBotName || "License Log"),
+    avatar_url: s.discordBotAvatar || undefined,
+    embeds: [{
+      title: "Percobaan pemakaian TANPA lisensi",
+      color: 15158332,
+      fields: [
+        { name: "Produk", value: "\u27a4 " + (p.name || pid), inline: true },
+        { name: "Creator", value: (body.creatorType || "?") + " `" + creatorId + "`", inline: true },
+        { name: "Place", value: placeId ? ("https://www.roblox.com/games/" + placeId) : "(tidak diketahui)", inline: false },
+      ],
+      timestamp: new Date().toISOString(),
+    }],
+  };
+  try {
+    await fetch(s.discordWebhook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+  } catch (e) {}
+}
+
 // ---------- bot Discord: command /own ----------
 function hexToBytes(hex) {
   const arr = new Uint8Array(hex.length / 2);
@@ -414,35 +475,41 @@ const ADMIN_HTML = `<!doctype html>
 <title>Panel Lisensi</title>
 <style>
   :root{
-    --ink:#1a1d23; --sub:#68707d; --line:#e4e7ec; --bg:#f6f7f9; --card:#ffffff;
-    --accent:#4f46e5; --accent-ink:#3730a3; --accent-soft:#eef0fe;
-    --ok:#0a8f4f; --ok-soft:#e7f7ee; --bad:#d92d20; --bad-soft:#fdeceb;
-    --side-bg:#14161f; --side-ink:#c7cad4; --side-active:#232637;
+    --bg:#0f1117; --card:#171a21; --card-2:#1e222b; --line:#2a2f3a; --line-2:#363c49;
+    --ink:#e7e9ee; --sub:#9aa2b1;
+    --accent:#6366f1; --accent-ink:#818cf8; --accent-soft:#1f2340;
+    --ok:#34d399; --ok-soft:#0f2a20; --ok-line:#1f4a37;
+    --bad:#f87171; --bad-soft:#2c1618; --bad-line:#5b2626;
+    --side-bg:#0b0d12; --side-ink:#aeb4c0; --side-active:#20242e;
     --radius:12px;
   }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0}
   body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Arial,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+  ::selection{background:var(--accent);color:#fff}
   code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  a{color:var(--accent-ink)}
   h1{font-size:17px;margin:0;font-weight:700}
   h2{font-size:13px;margin:0 0 12px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--sub)}
   h3{font-size:16px;margin:0;font-weight:700}
   p{margin:0}
   label{display:block;font-size:12.5px;margin:0 0 5px;color:var(--sub);font-weight:600}
-  input{width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:9px;font-size:14px;background:#fff;color:var(--ink)}
+  input{width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:9px;font-size:14px;background:var(--card-2);color:var(--ink)}
+  input::placeholder{color:#5c6475}
   input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
   .field{margin-bottom:12px}
   .row{display:flex;gap:12px;flex-wrap:wrap}
   .row>div{flex:1;min-width:170px}
   button{padding:9px 14px;border:0;border-radius:9px;font-size:13.5px;cursor:pointer;font-weight:600;font-family:inherit}
-  button:disabled{opacity:.5;cursor:not-allowed}
+  button:disabled{opacity:.45;cursor:not-allowed}
   .primary{background:var(--accent);color:#fff}
   .primary:hover:not(:disabled){background:var(--accent-ink)}
-  .danger{background:var(--bad-soft);color:var(--bad)}
-  .danger:hover:not(:disabled){background:#f9d8d5}
-  .ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
-  .ghost:hover:not(:disabled){background:#f2f3f5}
-  .dark{background:var(--ink);color:#fff}
+  .danger{background:var(--bad-soft);color:var(--bad);border:1px solid var(--bad-line)}
+  .danger:hover:not(:disabled){background:#3a1c1f}
+  .ghost{background:var(--card-2);color:var(--ink);border:1px solid var(--line)}
+  .ghost:hover:not(:disabled){background:#252a34;border-color:var(--line-2)}
+  .dark{background:var(--line);color:#fff;border:1px solid var(--line-2)}
+  .dark:hover:not(:disabled){background:var(--line-2)}
   .hidden{display:none !important}
   .err{color:var(--bad);font-size:12.5px;margin-top:8px}
   .ok{color:var(--ok);font-size:12.5px;margin-top:8px}
@@ -454,6 +521,8 @@ const ADMIN_HTML = `<!doctype html>
   .badge.ok{background:var(--ok-soft);color:var(--ok)}
   .badge.bad{background:var(--bad-soft);color:var(--bad)}
   .badge.neutral{background:var(--accent-soft);color:var(--accent-ink)}
+  .chk{display:flex;align-items:flex-start;gap:9px;font-size:13px;color:var(--ink);font-weight:500;cursor:pointer;line-height:1.45}
+  .chk input{width:auto;margin:2px 0 0}
 
   /* ---- login ---- */
   #login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
@@ -462,10 +531,10 @@ const ADMIN_HTML = `<!doctype html>
 
   /* ---- shell ---- */
   #app{display:flex;min-height:100vh}
-  .side{width:220px;flex:0 0 220px;background:var(--side-bg);color:var(--side-ink);padding:18px 12px;display:flex;flex-direction:column;gap:4px}
+  .side{width:220px;flex:0 0 220px;background:var(--side-bg);color:var(--side-ink);padding:18px 12px;display:flex;flex-direction:column;gap:4px;border-right:1px solid var(--line)}
   .side .brand{color:#fff;font-weight:800;font-size:15px;padding:6px 10px 18px}
   .side button.nav{all:unset;box-sizing:border-box;width:100%;padding:10px 12px;border-radius:9px;font-size:13.5px;font-weight:600;cursor:pointer;color:var(--side-ink)}
-  .side button.nav:hover{background:#1c1f2c}
+  .side button.nav:hover{background:#161a24}
   .side button.nav.active{background:var(--side-active);color:#fff}
   .side .foot{margin-top:auto;padding-top:12px}
   .side .foot button{width:100%}
@@ -479,35 +548,41 @@ const ADMIN_HTML = `<!doctype html>
   .wrap{display:flex;gap:16px;align-items:flex-start}
   .col-prod{flex:0 0 260px}
   .col-list{flex:1;min-width:0}
-  .pill{display:block;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;font-size:13px;line-height:1.4}
-  .pill:hover{border-color:#c7cbd4}
-  .pill.active{background:var(--ink);border-color:var(--ink);color:#fff}
+  .pill{display:block;width:100%;text-align:left;background:var(--card-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;font-size:13px;line-height:1.4;color:var(--ink)}
+  .pill:hover{border-color:var(--line-2)}
+  .pill.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  .pill.active .muted,.pill.active code{color:#dfe0ff}
   .pill .pn{font-weight:700;font-size:13px}
-  .pill code{font-size:11px;opacity:.7}
+  .pill code{font-size:11px;opacity:.75}
 
   table{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px}
   th{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--sub);text-align:left;padding:0 6px 8px;font-weight:700}
   td{border-top:1px solid var(--line);padding:9px 6px;text-align:left;vertical-align:middle}
-  img.av{width:34px;height:34px;border-radius:50%;background:#eee;object-fit:cover;display:block}
-  .av.ph{width:34px;height:34px;border-radius:50%;background:#eee}
+  img.av{width:34px;height:34px;border-radius:50%;background:var(--card-2);object-fit:cover;display:block}
+  .av.ph{width:34px;height:34px;border-radius:50%;background:var(--card-2)}
   .topline{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
   .pidline{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
-  .pidline code{background:#f2f3f5;padding:3px 8px;border-radius:6px;font-size:12.5px}
-  .tgl{border:1px solid var(--line);border-radius:20px;padding:5px 12px;font-size:12px;cursor:pointer;font-weight:600}
-  .tgl.on{background:var(--ok-soft);color:var(--ok);border-color:#c7ecd8}
-  .tgl.off{background:var(--bad-soft);color:var(--bad);border-color:#f6c9c4}
-  .xbtn{background:none;color:var(--bad);border:1px solid #f6c9c4;border-radius:8px;padding:5px 9px;font-size:12px;cursor:pointer;font-weight:600}
+  .pidline code{background:var(--card-2);padding:3px 8px;border-radius:6px;font-size:12.5px;border:1px solid var(--line)}
+  .tgl{border:1px solid var(--line);border-radius:20px;padding:5px 12px;font-size:12px;cursor:pointer;font-weight:600;background:var(--card-2);color:var(--ink)}
+  .tgl.on{background:var(--ok-soft);color:var(--ok);border-color:var(--ok-line)}
+  .tgl.off{background:var(--bad-soft);color:var(--bad);border-color:var(--bad-line)}
+  .xbtn{background:none;color:var(--bad);border:1px solid var(--bad-line);border-radius:8px;padding:5px 9px;font-size:12px;cursor:pointer;font-weight:600}
+  .xbtn:hover{background:var(--bad-soft)}
   .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 4px}
   .toolbar input{flex:1;min-width:180px}
 
   .resolve-box{border:1px dashed var(--line);border-radius:9px;padding:10px 12px;margin-top:8px;font-size:13px;display:flex;align-items:center;gap:10px}
   .resolve-box.empty{color:var(--sub);border-style:dashed}
-  .resolve-box.good{border-color:#c7ecd8;background:var(--ok-soft)}
-  .resolve-box.bad{border-color:#f6c9c4;background:var(--bad-soft);color:var(--bad)}
+  .resolve-box.good{border-color:var(--ok-line);background:var(--ok-soft)}
+  .resolve-box.bad{border-color:var(--bad-line);background:var(--bad-soft);color:var(--bad)}
+
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-thumb{background:#2a2f3a;border-radius:8px;border:2px solid var(--bg)}
+  ::-webkit-scrollbar-thumb:hover{background:#363c49}
 
   @media (max-width:820px){
     #app{flex-direction:column}
-    .side{width:100%;flex:none;flex-direction:row;overflow-x:auto;padding:10px}
+    .side{width:100%;flex:none;flex-direction:row;overflow-x:auto;padding:10px;border-right:0;border-bottom:1px solid var(--line)}
     .side .brand{display:none}
     .side .foot{margin-top:0}
     .main{padding:18px}
@@ -637,8 +712,9 @@ const ADMIN_HTML = `<!doctype html>
           <label>Webhook URL channel Discord</label>
           <input id="hook" placeholder="https://discord.com/api/webhooks/..."/>
         </div>
-        <button class="primary" onclick="saveSettings()">Simpan pengaturan</button>
-        <span id="settingsMsg" class="muted"></span>
+        <label class="chk spacer"><input type="checkbox" id="alertUnauth"/> Kirim peringatan saat ada game TANPA lisensi mencoba menjalankan produkku (maks 1x/jam/game)</label>
+        <div class="spacer"><button class="primary" onclick="saveSettings()">Simpan pengaturan</button>
+        <span id="settingsMsg" class="muted"></span></div>
       </div>
 
       <div class="card">
@@ -704,6 +780,7 @@ async function loadSettings(){
   document.getElementById("hook").value=j.discordWebhook||"";
   document.getElementById("bot_name").value=j.discordBotName||"";
   document.getElementById("bot_avatar").value=j.discordBotAvatar||"";
+  document.getElementById("alertUnauth").checked=!!j.discordAlertUnauthorized;
   var st=document.getElementById("secretStatus");
   if(j.hasSlashCommandSecrets){ st.textContent="Secret bot sudah lengkap"; st.className="badge ok"; }
   else { st.textContent="Secret bot belum lengkap"; st.className="badge bad"; }
@@ -714,6 +791,7 @@ async function saveSettings(){
     discordWebhook: document.getElementById("hook").value.trim(),
     discordBotName: document.getElementById("bot_name").value.trim(),
     discordBotAvatar: document.getElementById("bot_avatar").value.trim(),
+    discordAlertUnauthorized: document.getElementById("alertUnauth").checked,
   };
   var r=await fetch("/api/admin/settings",{method:"POST",headers:H(),body:JSON.stringify(body)});
   document.getElementById("settingsMsg").textContent = r.status===200 ? " Tersimpan." : " Gagal menyimpan.";
@@ -894,12 +972,18 @@ async function deleteProduct(){
 function buildSnippet(url,pid){
   var s=[
     'do',
+    '  -- ===== Proteksi Lisensi (ubah hanya bagian SETTINGS) =====',
     '  local HttpService = game:GetService("HttpService")',
     '  local Players     = game:GetService("Players")',
-    '  local RunService  = game:GetService("RunService")',
+    '  ----- SETTINGS -----',
     '  local PRODUCT_ID  = "'+pid+'"',
     '  local LICENSE_URL = "'+url+'"',
     '  local KICK_MSG    = "Sistem ini tidak berlisensi untuk game ini."',
+    '  local FAIL_OPEN   = true    -- true: kalau server lisensi down, game tetap jalan (ramah pembeli).',
+    '                              -- false: kalau tak bisa verifikasi, game dimatikan (anti-bajak lebih ketat).',
+    '  local RECHECK_SEC = 300     -- selang cek ulang (detik)',
+    '  local MAX_SKEW    = 120     -- toleransi selisih waktu respon (detik)',
+    '  --------------------',
     '  local function check()',
     '    local nonce = HttpService:GenerateGUID(false)',
     '    local ok, res = pcall(function()',
@@ -910,21 +994,32 @@ function buildSnippet(url,pid){
     '    end)',
     '    if not ok then return nil end',
     '    local ok2, data = pcall(function() return HttpService:JSONDecode(res) end)',
-    '    if not ok2 or type(data) ~= "table" or data.nonce ~= nonce then return nil end',
+    '    if not ok2 or type(data) ~= "table" then return nil end',
+    '    if data.nonce ~= nonce then return nil end                 -- cegah balasan palsu / replay',
+    '    if type(data.ts) == "number" then',
+    '      local ts = data.ts; if ts > 1e11 then ts = ts / 1000 end -- toleran detik atau milidetik',
+    '      if math.abs(os.time() - ts) > MAX_SKEW then return nil end -- tolak respon basi',
+    '    end',
     '    return data.authorized == true',
     '  end',
     '  local function definitive()',
     '    for _ = 1, 4 do',
     '      local r = check()',
     '      if r ~= nil then return r end',
-    '      task.wait(3)',
+    '      task.wait(3 + math.random() * 2)',
     '    end',
     '    return nil',
     '  end',
-    '  local function deniedTwice()',
-    '    if definitive() ~= false then return false end',
-    '    task.wait(6)',
-    '    return definitive() == false',
+    '  -- true = berlisensi, false = ditolak pasti, nil = tidak yakin (outage)',
+    '  local function verdict()',
+    '    local a = definitive()',
+    '    if a == true then return true end',
+    '    if a == false then',
+    '      task.wait(6)',
+    '      if definitive() == false then return false end',
+    '      return nil',
+    '    end',
+    '    return nil',
     '  end',
     '  local kicked = false',
     '  local function shutdown(reason)',
@@ -934,15 +1029,17 @@ function buildSnippet(url,pid){
     '    Players.PlayerAdded:Connect(function(p) pcall(function() p:Kick(KICK_MSG) end) end)',
     '    for _, p in ipairs(Players:GetPlayers()) do pcall(function() p:Kick(KICK_MSG) end) end',
     '  end',
-    '  if deniedTwice() then',
-    '    shutdown("Tidak ter-whitelist")',
+    '  local v = verdict()',
+    '  if v == false or (v == nil and not FAIL_OPEN) then',
+    '    shutdown(v == false and "Tidak ter-whitelist" or "Tidak bisa memverifikasi")',
     '    return',
     '  end',
     '  task.spawn(function()',
     '    while not kicked do',
-    '      task.wait(300)',
-    '      if deniedTwice() then',
-    '        shutdown("Whitelist dicabut")',
+    '      task.wait(RECHECK_SEC)',
+    '      local vv = verdict()',
+    '      if vv == false or (vv == nil and not FAIL_OPEN) then',
+    '        shutdown(vv == false and "Whitelist dicabut" or "Tidak bisa memverifikasi")',
     '        break',
     '      end',
     '    end',
@@ -952,7 +1049,6 @@ function buildSnippet(url,pid){
   ];
   return s.join(NL);
 }
-
 function copySnippet(){
   var url=location.origin+"/api/verify";
   var code=buildSnippet(url,CUR);

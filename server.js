@@ -1,6 +1,13 @@
 // ============================================================
-//  Server lisensi + panel admin web.
-//  Jalankan lokal:  ADMIN_KEY=kunci-admin node server.js
+//  Server lisensi + panel admin web — VERSI LOKAL (LEGACY, OPSIONAL).
+//
+//  CATATAN: Untuk pemakaian sebenarnya, pakai worker.js (Cloudflare Worker).
+//  Versi Worker lebih lengkap (produk multi, bot Discord, panel penuh, data
+//  permanen di KV) dan itulah yang dibahas di TUTORIAL. File ini hanya untuk
+//  uji coba cepat di komputer sendiri; data disimpan di whitelist.json lokal
+//  dan formatnya lebih sederhana (satu productId -> users/groups).
+//
+//  Jalankan lokal:  ADMIN_KEY=kunci-admin-yang-panjang node server.js
 //  Panel admin:     http://localhost:3000/admin
 // ============================================================
 
@@ -98,15 +105,19 @@ const ADMIN_HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Panel Lisensi</title>
 <style>
-  body{font-family:system-ui,Arial,sans-serif;max-width:720px;margin:24px auto;padding:0 16px;color:#111}
+  :root{--bg:#0f1117;--card:#171a21;--card-2:#1e222b;--line:#2a2f3a;--ink:#e7e9ee;--sub:#9aa2b1}
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,Arial,sans-serif;max-width:720px;margin:0 auto;padding:24px 16px;color:var(--ink);background:var(--bg);min-height:100vh}
   h1{font-size:20px} h2{font-size:16px;margin-top:24px}
-  label{display:block;font-size:13px;margin:10px 0 4px;color:#333}
-  input{width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box}
+  label{display:block;font-size:13px;margin:10px 0 4px;color:var(--sub)}
+  input{width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px;background:var(--card-2);color:var(--ink)}
+  input::placeholder{color:#5c6475}
+  input:focus{outline:2px solid #6366f1;border-color:#6366f1}
   .row{display:flex;gap:10px} .row>div{flex:1}
-  button{margin-top:14px;padding:10px 14px;border:0;border-radius:8px;font-size:14px;cursor:pointer}
-  .grant{background:#0a7d2c;color:#fff} .revoke{background:#b21f1f;color:#fff} .list{background:#333;color:#fff}
-  pre{background:#f5f5f5;padding:12px;border-radius:8px;overflow:auto;font-size:12px}
-  .note{color:#666;font-size:12px;margin-top:6px}
+  button{margin-top:14px;padding:10px 14px;border:0;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600;color:#fff}
+  .grant{background:#0a8f4f} .revoke{background:#d92d20} .list{background:#3a3f4b}
+  pre{background:var(--card);border:1px solid var(--line);padding:12px;border-radius:8px;overflow:auto;font-size:12px;color:var(--ink)}
+  .note{color:var(--sub);font-size:12px;margin-top:6px}
 </style></head><body>
 <h1>Panel Lisensi</h1>
 <label>Kunci Admin (tidak disimpan; ketik ulang tiap buka halaman)</label>
