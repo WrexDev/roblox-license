@@ -1,0 +1,11 @@
+# Konfigurasi Cloudflare Worker.
+# name HARUS sama dengan nama Worker di dashboard Cloudflare.
+name = "roblox-license"
+main = "worker.js"
+compatibility_date = "2026-06-30"
+workers_dev = true
+
+# Penyimpanan permanen (KV). Tempel ID namespace dari dashboard di bawah.
+[[kv_namespaces]]
+binding = "LICENSE_KV"
+id = "TEMPEL_ID_KV_NAMESPACE_DI_SINI"
