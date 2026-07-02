@@ -8,4 +8,4 @@ workers_dev = true
 # Penyimpanan permanen (KV). Tempel ID namespace dari dashboard di bawah.
 [[kv_namespaces]]
 binding = "LICENSE_KV"
-id = "TEMPEL_ID_KV_NAMESPACE_DI_SINI"
+id = "71dd09254f94462e8208fe0ef965fff8"
