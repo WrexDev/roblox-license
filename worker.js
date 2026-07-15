@@ -740,12 +740,15 @@ const ADMIN_HTML = `<!doctype html>
   .wrap{display:flex;gap:16px;align-items:flex-start}
   .col-prod{flex:0 0 260px}
   .col-list{flex:1;min-width:0}
-  .pill{display:block;width:100%;text-align:left;background:var(--card-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;font-size:13px;line-height:1.4;color:var(--ink)}
+  .pill{display:flex;width:100%;align-items:center;gap:10px;text-align:left;background:var(--card-2);border:1px solid var(--line);border-radius:10px;padding:9px 10px;margin-bottom:8px;cursor:pointer;font-size:13px;line-height:1.4;color:var(--ink)}
   .pill:hover{border-color:var(--line-2)}
   .pill.active{background:var(--accent);border-color:var(--accent);color:#fff}
   .pill.active .muted,.pill.active code{color:#dfe0ff}
   .pill .pn{font-weight:700;font-size:13px}
   .pill code{font-size:11px;opacity:.75}
+  .pill-copy{min-width:0;flex:1}
+  .prod-img{width:42px;height:42px;flex:0 0 42px;border-radius:8px;object-fit:cover;border:1px solid var(--line);background:var(--card)}
+  .prod-img-fallback{width:42px;height:42px;flex:0 0 42px;border-radius:8px;border:1px solid var(--line);background:var(--card);display:flex;align-items:center;justify-content:center;color:var(--sub)}
 
   table{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px}
   th{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--sub);text-align:left;padding:0 6px 8px;font-weight:700}
@@ -760,7 +763,7 @@ const ADMIN_HTML = `<!doctype html>
   .tgl.off{background:var(--bad-soft);color:var(--bad);border-color:var(--bad-line)}
   .xbtn{background:none;color:var(--bad);border:1px solid var(--bad-line);border-radius:8px;padding:5px 9px;font-size:12px;cursor:pointer;font-weight:600}
   .xbtn:hover{background:var(--bad-soft)}
-  .rowActions{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;white-space:nowrap}
+  .rowActions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap;white-space:nowrap}
   .actionsCell{white-space:nowrap}
   .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0 4px}
   .toolbar input{flex:1;min-width:180px}
@@ -770,13 +773,19 @@ const ADMIN_HTML = `<!doctype html>
   /* panel produk: konten utama + sidebar info */
   .pwrap{display:flex;gap:16px;align-items:flex-start}
   .pmain{flex:1;min-width:0;display:flex;flex-direction:column;gap:14px}
-  .pside{flex:0 0 250px;position:sticky;top:20px}
-  .pinfo h3{font-size:15px;margin-bottom:2px;word-break:break-word}
-  .pinfo .pidline{margin-top:10px}
-  .pinfo .pidline code{word-break:break-all}
-  .pinfo .actions{display:flex;flex-direction:column;gap:8px;margin-top:14px}
-  .pinfo .actions button{width:100%}
-  .pinfo .created{border-top:1px solid var(--line);margin-top:14px;padding-top:12px}
+  .pside{flex:0 0 270px;position:sticky;top:20px}
+  .pinfo{padding:17px}
+  .pinfo h3{font-size:16px;line-height:1.35;margin:5px 0 0;word-break:break-word;color:var(--ink)}
+  .pinfo .pidline{margin-top:12px;padding:9px 10px;background:var(--card-2);border:1px solid var(--line);border-radius:9px}
+  .pinfo .pidline code{word-break:break-all;background:transparent;border:0;padding:0;color:var(--ink)}
+  .pinfo .actions{display:grid;grid-template-columns:1fr;gap:7px;margin-top:12px}
+  .pinfo .actions button{width:100%;height:38px;justify-content:flex-start;padding:0 12px;background:var(--card-2);color:var(--ink);border:1px solid var(--line);font-size:13px}
+  .pinfo .actions button:hover:not(:disabled){background:#2b2b2b;border-color:var(--line-2)}
+  .pinfo .actions .dark{background:#303030;color:var(--ink);border-color:var(--line-2)}
+  .pinfo .actions .dark:hover:not(:disabled){background:#383838;border-color:#555}
+  .pinfo .actions .danger{background:transparent;color:var(--bad);border-color:var(--bad-line)}
+  .pinfo .actions .danger:hover:not(:disabled){background:var(--bad-soft);border-color:var(--bad)}
+  .pinfo .created{border-top:1px solid var(--line);margin-top:14px;padding-top:12px;line-height:1.45}
   .sectlabel{display:flex;align-items:center;gap:7px;color:var(--accent-ink);font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;margin-bottom:2px}
 
   /* modal edit detail */
@@ -798,6 +807,15 @@ const ADMIN_HTML = `<!doctype html>
   .resolve-box.empty{color:var(--sub);border-style:dashed}
   .resolve-box.good{border-color:var(--ok-line);background:var(--ok-soft)}
   .resolve-box.bad{border-color:var(--bad-line);background:var(--bad-soft);color:var(--bad)}
+  .validate-btn{background:var(--card-2);color:var(--ink);border:1px solid var(--line-2);font-weight:700}
+  .validate-btn:hover:not(:disabled){background:#303030;border-color:#555}
+  .pagination{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;margin-top:14px}
+  .pagination button{min-width:34px;padding:7px 10px}
+  .pagination button.current{background:var(--accent);border-color:var(--accent);color:#fff}
+  .pagination button:disabled{opacity:.4;cursor:not-allowed}
+  .title-icon{display:inline-flex;align-items:center;gap:8px}
+  .license-copy{color:#d8c8ff;border-color:#594b7a;background:#211b32}
+  .license-copy:hover{background:#2b2340;border-color:#75639e}
 
   ::-webkit-scrollbar{width:11px;height:11px}
   ::-webkit-scrollbar-thumb{background:#2a2f3a;border-radius:8px;border:2px solid var(--bg)}
@@ -844,7 +862,7 @@ const ADMIN_HTML = `<!doctype html>
       <div class="topbar"><h3>Produk &amp; Whitelist</h3></div>
 
       <div class="card">
-        <h2>Buat produk baru</h2>
+        <h2 class="title-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><line x1="12" y1="7" x2="12" y2="17"/><line x1="7" y1="12" x2="17" y2="12"/></svg>Buat produk baru</h2>
         <div class="row">
           <div><input id="np_name" placeholder="Nama produk, mis. Music System"/></div>
           <div style="flex:0 0 auto"><button class="primary" onclick="createProduct()"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Buat produk</button></div>
@@ -855,7 +873,7 @@ const ADMIN_HTML = `<!doctype html>
       <div class="wrap spacer">
         <div class="col-prod">
           <div class="card">
-            <h2>Produk</h2>
+            <h2 class="title-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>Produk</h2>
             <input id="prodSearch" placeholder="Cari produk..." oninput="renderProducts()"/>
             <div id="products" style="margin-top:10px"></div>
           </div>
@@ -869,14 +887,14 @@ const ADMIN_HTML = `<!doctype html>
               <div class="pmain">
 
                 <div class="card">
-                  <h2>Tambah whitelist</h2>
+                  <h2 class="title-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>Tambah whitelist</h2>
                   <div class="row">
                     <div>
                       <label>Username atau User ID Roblox</label>
                       <input id="g_input" placeholder="mis. paksatpam_9 atau 123456789" autocomplete="off" value="" oninput="onTargetInput()" onkeydown="if(event.key==='Enter')validateTarget()"/>
                     </div>
                     <div style="flex:0 0 auto;align-self:flex-end">
-                      <button class="ghost" id="validateBtn" onclick="validateTarget()"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Validasi</button>
+                      <button class="validate-btn" id="validateBtn" onclick="validateTarget()"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Validasi</button>
                     </div>
                   </div>
                   <div id="resolveBox" class="resolve-box empty">Isi username/ID lalu klik Validasi untuk memastikan akunnya benar.</div>
@@ -890,11 +908,11 @@ const ADMIN_HTML = `<!doctype html>
 
                 <div class="card">
                   <div class="topline">
-                    <h2 style="margin:0">Daftar whitelist</h2>
+                    <h2 class="title-icon" style="margin:0"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>Daftar whitelist</h2>
                   </div>
                   <div class="toolbar">
-                    <input id="userSearch" placeholder="Cari username / ID..." oninput="renderUsers()"/>
-                    <select id="sortSel" onchange="renderUsers()">
+                    <input id="userSearch" placeholder="Cari username / ID..." oninput="USER_PAGE=1;renderUsers()"/>
+                    <select id="sortSel" onchange="USER_PAGE=1;renderUsers()">
                       <option value="newest">Terbaru</option>
                       <option value="oldest">Terlama</option>
                       <option value="az">Abjad (A-Z)</option>
@@ -908,6 +926,7 @@ const ADMIN_HTML = `<!doctype html>
                     <thead><tr><th></th><th></th><th>User</th><th>Status</th><th>Diberikan</th><th>Aksi</th></tr></thead>
                     <tbody id="rows"><tr><td colspan="6" class="muted">-</td></tr></tbody>
                   </table>
+                  <div id="userPagination" class="pagination"></div>
                   <div id="listMsg" class="muted"></div>
                 </div>
 
@@ -1020,7 +1039,7 @@ const ADMIN_HTML = `<!doctype html>
 </div>
 
 <script>
-var ADMIN="", DB={products:{},settings:{}}, CUR="", uidTimer=null, INFO={}, VALIDATED=null;
+var ADMIN="", DB={products:{},settings:{}}, CUR="", uidTimer=null, INFO={}, VALIDATED=null, USER_PAGE=1;
 var NL=String.fromCharCode(10);
 function H(){return {"Content-Type":"application/json","x-admin-key":ADMIN}}
 function esc(s){s=(s==null?"":String(s));return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
@@ -1154,12 +1173,14 @@ function renderProducts(){
   var html="";
   for(var i=0;i<pids.length;i++){
     var pid=pids[i]; var p=products()[pid]||{}; var n=Object.keys(p.users||{}).length;
-    html+='<button class="pill'+(pid===CUR?" active":"")+'" data-pid="'+esc(pid)+'">'
-      +'<div class="pn">'+esc(p.name||pid)+' <span class="muted">('+n+')</span></div>'
-      +'<code>'+esc(pid)+'</code></button>';
+    var img=(p.imageUrl||"").trim(); var validImg=/^https?:\/\//i.test(img);
+    var thumb=validImg?'<img class="prod-img" src="'+esc(img)+'" alt="" onerror="this.style.display=\\'none\\';this.nextElementSibling.style.display=\\'flex\\'"><span class="prod-img-fallback" style="display:none">&#9633;</span>':'<span class="prod-img-fallback">&#9633;</span>';
+    html+='<button class="pill'+(pid===CUR?" active":"")+'" data-pid="'+esc(pid)+'">'+thumb
+      +'<span class="pill-copy"><span class="pn">'+esc(p.name||pid)+' <span class="muted">('+n+')</span></span><br>'
+      +'<code>'+esc(pid)+'</code></span></button>';
   }
   el.innerHTML=html;
-  el.onclick=function(e){ var b=e.target.closest("button[data-pid]"); if(b){ CUR=b.getAttribute("data-pid"); document.getElementById("userSearch").value=""; resetTargetInput(); renderProducts(); } };
+  el.onclick=function(e){ var b=e.target.closest("button[data-pid]"); if(b){ CUR=b.getAttribute("data-pid"); USER_PAGE=1; document.getElementById("userSearch").value=""; resetTargetInput(); renderProducts(); } };
   renderProductPanel();
 }
 
@@ -1226,14 +1247,16 @@ async function saveProductMeta(){
 }
 
 async function renderUsers(){
-  var p=products()[CUR]; if(!p){ return; }
+  var renderPid=CUR; var p=products()[renderPid]; if(!p){ return; }
   var users=p.users||{}; var ids=Object.keys(users);
   var rows=document.getElementById("rows");
-  if(ids.length===0){ rows.innerHTML='<tr><td colspan="6" class="muted">Belum ada whitelist untuk produk ini.</td></tr>'; return; }
+  var pager=document.getElementById("userPagination");
+  if(ids.length===0){ rows.innerHTML='<tr><td colspan="6" class="muted">Belum ada whitelist untuk produk ini.</td></tr>'; pager.innerHTML=""; return; }
   var need=ids.filter(function(id){ return !INFO[id]; });
   if(need.length){
     rows.innerHTML='<tr><td colspan="6" class="muted">Memuat data Roblox...</td></tr>';
     try{ var r=await fetch("/api/admin/enrich",{method:"POST",headers:H(),body:JSON.stringify({userIds:need})}); if(r.status===200){ var got=await r.json(); for(var k in got) INFO[k]=got[k]; } }catch(e){}
+    if(CUR!==renderPid) return;
   }
   var sortSel=document.getElementById("sortSel");
   var sortMode=sortSel?sortSel.value:"newest";
@@ -1251,11 +1274,14 @@ async function renderUsers(){
     return 0;
   });
   var q=(document.getElementById("userSearch").value||"").toLowerCase().trim();
+  if(q) ids=ids.filter(function(id){ var u=users[id]||{}, meta=INFO[id]||{}; var uname=meta.username||u.username||""; return uname.toLowerCase().indexOf(q)>=0 || id.indexOf(q)>=0; });
+  var pageSize=20, totalPages=Math.max(1,Math.ceil(ids.length/pageSize));
+  USER_PAGE=Math.min(Math.max(1,USER_PAGE),totalPages);
+  var visibleIds=ids.slice((USER_PAGE-1)*pageSize,USER_PAGE*pageSize);
   var html="";
-  for(var i=0;i<ids.length;i++){
-    var id=ids[i]; var u=users[id]||{}; var meta=INFO[id]||{};
+  for(var i=0;i<visibleIds.length;i++){
+    var id=visibleIds[i]; var u=users[id]||{}; var meta=INFO[id]||{};
     var uname=meta.username||u.username||"(tidak diketahui)";
-    if(q && uname.toLowerCase().indexOf(q)<0 && id.indexOf(q)<0) continue;
     var av=meta.avatarUrl||"";
     var on=(u.active!==false);
     var when=u.grantedAt?new Date(u.grantedAt).toLocaleString():"-";
@@ -1268,11 +1294,22 @@ async function renderUsers(){
       +'<td><b>'+esc(uname)+'</b><br><span class="muted">'+esc(id)+'</span></td>'
       +'<td>'+(on?'<span class="badge ok">aktif</span>':'<span class="badge bad">nonaktif</span>')+'</td>'
       +'<td class="muted">'+esc(when)+'</td>'
-      +'<td class="actionsCell"><div class="rowActions">'+tgl+'<button class="xbtn" data-act="del" data-id="'+esc(id)+'">Hapus</button></div></td>'
+      +'<td class="actionsCell"><div class="rowActions"><button class="ghost license-copy" data-act="license" data-id="'+esc(id)+'" data-name="'+esc(uname)+'"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Salin data</button>'+tgl+'<button class="xbtn" data-act="del" data-id="'+esc(id)+'">Hapus</button></div></td>'
       +'</tr>';
   }
   rows.innerHTML=html||'<tr><td colspan="6" class="muted">Tidak ada yang cocok dengan pencarian.</td></tr>';
+  renderUserPagination(totalPages,ids.length);
 }
+
+function renderUserPagination(totalPages,totalItems){
+  var el=document.getElementById("userPagination");
+  if(totalItems<=20){ el.innerHTML=""; return; }
+  var html='<button class="ghost" onclick="setUserPage('+(USER_PAGE-1)+')" '+(USER_PAGE===1?'disabled':'')+' aria-label="Halaman sebelumnya">&lt;</button>';
+  for(var i=1;i<=totalPages;i++) html+='<button class="ghost'+(i===USER_PAGE?' current':'')+'" onclick="setUserPage('+i+')">'+i+'</button>';
+  html+='<button class="ghost" onclick="setUserPage('+(USER_PAGE+1)+')" '+(USER_PAGE===totalPages?'disabled':'')+' aria-label="Halaman berikutnya">&gt;</button>';
+  el.innerHTML=html;
+}
+function setUserPage(page){ USER_PAGE=page; renderUsers(); }
 
 function attachRowHandler(){
   document.getElementById("rows").addEventListener("click",function(e){
@@ -1280,7 +1317,17 @@ function attachRowHandler(){
     var id=t.getAttribute("data-id"); var act=t.getAttribute("data-act");
     if(act==="toggle") toggleUser(id, t.getAttribute("data-to")==="1");
     else if(act==="del") delOne(id);
+    else if(act==="license") copyLicenseData(id,t.getAttribute("data-name"),t);
   });
+}
+
+function copyLicenseData(id,username,btn){
+  var p=products()[CUR]||{};
+  var text="🔐 **LICENSEI DATA "+(p.name||CUR)+"**"+NL
+    +"Input Your **Roblox ID** Accout :  "+id+NL
+    +"Input Your  **Roblox Username** Account : "+username+NL+NL
+    +"**Make sure you are the owner of the group or experience!**";
+  copyText(text,btn,"Data lisensi disalin.");
 }
 
 async function toggleUser(id, active){
@@ -1473,7 +1520,7 @@ function copySnippet(){
 }
 
 function copyText(text, btn, msg){
-  function done(){ if(btn){ var old=btn.textContent; btn.textContent="Tersalin"; setTimeout(function(){btn.textContent=old;},1200); } if(msg){ document.getElementById("listMsg").textContent=" "+msg; } }
+  function done(){ if(btn){ var old=btn.innerHTML; btn.textContent="Tersalin"; setTimeout(function(){btn.innerHTML=old;},1200); } if(msg){ document.getElementById("listMsg").textContent=" "+msg; } }
   if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done, function(){ fallbackCopy(text); done(); }); }
   else { fallbackCopy(text); done(); }
 }
